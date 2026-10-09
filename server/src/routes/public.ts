@@ -204,7 +204,7 @@ publicApi.post('/order', writeLimit, (req, res) => {
 
 /** Guest-safe view of an online order: no ids, staff names or phone numbers. */
 function orderSummary(code: string) {
-  const o = get<any>(`SELECT id, code, status, total, fulfilment, created_at FROM orders WHERE code = ? AND channel = 'online'`, code.toUpperCase());
+  const o = get<any>(`SELECT id, code, status, total, fulfilment, created_at, kitchen_started_at FROM orders WHERE code = ? AND channel = 'online'`, code.toUpperCase());
   if (!o) return null;
   const items = all<any>(
     `SELECT i.menu_item_id, i.name, i.qty, i.unit_price, i.status, m.image_url
@@ -216,9 +216,9 @@ function orderSummary(code: string) {
   if (o.status === 'void') stage = 'cancelled';
   else if (o.status !== 'open' || (items.length && items.every((i) => i.status === 'served'))) stage = 'completed';
   else if (items.length && items.every((i) => i.status === 'ready' || i.status === 'served')) stage = 'ready';
-  else if (items.some((i) => i.status === 'ready')) stage = 'preparing';
-  else if (Date.now() - new Date(o.created_at.replace(' ', 'T') + 'Z').getTime() > 3 * 60_000) stage = 'preparing';
-  const { id: _id, ...rest } = o;
+  // "preparing" only once the kitchen says so: Start cooking, or a dish marked ready
+  else if (o.kitchen_started_at || items.some((i) => i.status === 'ready')) stage = 'preparing';
+  const { id: _id, kitchen_started_at: _k, ...rest } = o;
   return { ...rest, stage, items: items.map(({ status: _s, ...i }) => i) };
 }
 

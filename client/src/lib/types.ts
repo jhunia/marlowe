@@ -213,6 +213,9 @@ export interface Order {
   created_at: string;
   closed_at: string | null;
   server_name?: string | null;
+  channel?: string | null;
+  fulfilment?: 'pickup' | 'room' | 'poolside' | null;
+  kitchen_started_at?: string | null;
   items?: OrderItem[];
 }
 

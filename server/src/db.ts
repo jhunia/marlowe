@@ -406,6 +406,7 @@ export function migrate() {
   addColumn('room_types', 'images', "TEXT NOT NULL DEFAULT '[]'");
   addColumn('menu_items', 'image_url', 'TEXT');
   addColumn('room_types', 'features', "TEXT NOT NULL DEFAULT '[]'");
+  addColumn('orders', 'kitchen_started_at', 'TEXT');
 }
 
 function addColumn(table: string, column: string, type: string) {

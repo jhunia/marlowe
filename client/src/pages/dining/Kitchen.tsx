@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { Check, ChefHat, Flame, Globe } from 'lucide-react';
 import { useAction, useApi, useNow } from '../../lib/hooks';
 import { minutesSince } from '../../lib/format';
 import { qs } from '../../lib/api';
@@ -21,9 +22,12 @@ export function Kitchen() {
     refetchInterval: 8000,
   });
   const ready = useAction<{ id: number }>('post', (b) => `/kitchen/items/${b.id}/toggle`, { invalidate: ['/kitchen'] });
-  const bump = useAction<{ id: number }>('post', (b) => `/kitchen/orders/${b.id}/bump${qs({ station: station === 'all' ? undefined : station })}`, {
+  const stationQs = qs({ station: station === 'all' ? undefined : station });
+  const bump = useAction<{ id: number }>('post', (b) => `/kitchen/orders/${b.id}/bump${stationQs}`, {
     invalidate: ['/kitchen', '/nav-counts', '/orders'],
   });
+  const start = useAction<{ id: number }>('post', (b) => `/kitchen/orders/${b.id}/start`, { invalidate: ['/kitchen'] });
+  const allUp = useAction<{ id: number }>('post', (b) => `/kitchen/orders/${b.id}/ready${stationQs}`, { invalidate: ['/kitchen'] });
 
   if (!allowed) return <Empty title="This door is locked." />;
   const venue = outlet === 'restaurant' ? 'venue-dining' : 'venue-roof';
@@ -47,7 +51,7 @@ export function Kitchen() {
         }
       />
       <p className="small muted" style={{ marginTop: -8 }}>
-        Tap a line when it’s up. Bump the ticket when everything has gone out. Tickets turn amber after 12 minutes and red after 20.
+        <b>Start cooking</b> when you pick a ticket up → tick each dish as it’s plated (or <b>Mark all ready</b>) → <b>Handed over</b> when it leaves the pass. Online guests see each step live. Tickets turn amber after 12 minutes and red after 20.
       </p>
 
       {isLoading || !data ? (
@@ -61,6 +65,9 @@ export function Kitchen() {
             const age = minutesSince(firstFired!);
             const cls = age >= 20 ? 'late' : age >= 12 ? 'warm' : '';
             const allReady = (o.items ?? []).every((i) => i.status === 'ready');
+            const started = !!o.kitchen_started_at || (o.items ?? []).some((i) => i.status === 'ready');
+            const online = o.channel === 'online';
+            const stage = allReady ? 2 : started ? 1 : 0;
             return (
               <div key={o.id} className={`ticket ${cls}`}>
                 <div className="ticket-head">
@@ -68,10 +75,30 @@ export function Kitchen() {
                   <span className="age">{age}′</span>
                 </div>
                 <div className="ticket-sub">
-                  <span className="mono">{o.code}</span> · {o.covers} cov · {o.server_name ?? ''}
+                  <span className="mono">{o.code}</span> ·{' '}
+                  {online ? (
+                    <span className="ticket-online">
+                      <Globe size={11} /> Online · {o.fulfilment === 'room' ? 'room service' : o.fulfilment ?? 'pickup'}
+                    </span>
+                  ) : (
+                    <>
+                      {o.covers} cov · {o.server_name ?? ''}
+                    </>
+                  )}
                 </div>
+                {online && (
+                  <div className="ticket-stage" title="What the guest sees on their phone">
+                    <span>Guest sees</span>
+                    {['Received', 'On the fire', 'Ready'].map((l, k) => (
+                      <i key={l} className={k === stage ? 'on' : k < stage ? 'done' : ''}>
+                        {l}
+                      </i>
+                    ))}
+                  </div>
+                )}
                 {(o.items ?? []).map((i) => (
-                  <div key={i.id} className={`ticket-item ${i.status}`} onClick={() => ready.mutate({ id: i.id })}>
+                  <div key={i.id} className={`ticket-item ${i.status}`} onClick={() => ready.mutate({ id: i.id })} role="button" aria-pressed={i.status === 'ready'} title={i.status === 'ready' ? 'Tap to un-mark' : 'Tap when this dish is plated'}>
+                    <span className="tick">{i.status === 'ready' && <Check size={13} strokeWidth={3} />}</span>
                     <span className="q">{i.qty}</span>
                     <span className="n">
                       {i.name}
@@ -80,10 +107,25 @@ export function Kitchen() {
                     <span className="small muted">{i.station}</span>
                   </div>
                 ))}
-                <div style={{ padding: '10px 14px 4px' }}>
-                  <button className={`btn block sm ${allReady ? 'venue' : 'ghost'}`} onClick={() => bump.mutate({ id: o.id })}>
-                    Bump ticket
-                  </button>
+                <div className="ticket-actions">
+                  {!started ? (
+                    <button className="btn block venue" onClick={() => start.mutate({ id: o.id })}>
+                      <Flame size={15} /> Start cooking
+                    </button>
+                  ) : !allReady ? (
+                    <button className="btn block venue" onClick={() => allUp.mutate({ id: o.id })}>
+                      <ChefHat size={15} /> Mark all ready
+                    </button>
+                  ) : (
+                    <button className="btn block venue" onClick={() => bump.mutate({ id: o.id })}>
+                      <Check size={15} /> Handed over
+                    </button>
+                  )}
+                  {!allReady && (
+                    <button className="btn block sm quiet" onClick={() => bump.mutate({ id: o.id })}>
+                      Clear ticket without marking ready
+                    </button>
+                  )}
                 </div>
               </div>
             );

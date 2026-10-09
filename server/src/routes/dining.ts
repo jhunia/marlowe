@@ -287,6 +287,22 @@ dining.post('/kitchen/items/:id/toggle', (req, res) => {
   res.json({ ok: true });
 });
 
+/** The kitchen has picked the ticket up — online guests now see "On the fire". */
+dining.post('/kitchen/orders/:id/start', (req, res) => {
+  const o = loadOrder(req);
+  run(`UPDATE orders SET kitchen_started_at = COALESCE(kitchen_started_at, datetime('now')) WHERE id = ?`, o.id);
+  res.json({ ok: true });
+});
+
+/** Every dish on the ticket is up — online guests now see "Ready". */
+dining.post('/kitchen/orders/:id/ready', (req, res) => {
+  const o = loadOrder(req);
+  const station = req.query.station === 'kitchen' || req.query.station === 'bar' ? String(req.query.station) : null;
+  run(`UPDATE order_items SET status = 'ready' WHERE order_id = ? AND status = 'fired' AND (? IS NULL OR station = ?)`, o.id, station, station);
+  run(`UPDATE orders SET kitchen_started_at = COALESCE(kitchen_started_at, datetime('now')) WHERE id = ?`, o.id);
+  res.json({ ok: true });
+});
+
 dining.post('/kitchen/orders/:id/bump', (req, res) => {
   const o = loadOrder(req);
   const station = req.query.station === 'kitchen' || req.query.station === 'bar' ? String(req.query.station) : null;
