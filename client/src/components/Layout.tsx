@@ -29,6 +29,7 @@ import { useAuth } from '../lib/auth';
 import { can, ROLE_LABELS, type Area } from '../lib/permissions';
 import { useApi, useNow } from '../lib/hooks';
 import { initials } from '../lib/format';
+import { FeedbackButton, useMeta } from './Feedback';
 
 interface NavItem {
   to: string;
@@ -55,6 +56,7 @@ export function Layout() {
   const loc = useLocation();
   const now = useNow(15000);
   const { data: counts } = useApi<NavCounts>('/nav-counts', { refetchInterval: 30000 });
+  const meta = useMeta();
 
   useEffect(() => setOpen(false), [loc.pathname, loc.search]);
 
@@ -189,11 +191,17 @@ export function Layout() {
               </span>
             </span>
           )}
+          {meta?.demo && (
+            <span className="demo-pill" title="Sample data — changes are wiped automatically">
+              Test version · resets every {meta.reset_hours}h
+            </span>
+          )}
           <span className="clock">{now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</span>
         </header>
         <main className="content">
           <Outlet />
         </main>
+        <FeedbackButton area="console" role={user?.role} />
       </div>
     </div>
   );

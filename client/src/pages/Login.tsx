@@ -1,7 +1,11 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { ArrowRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { useMeta } from '../components/Feedback';
 import { useAuth } from '../lib/auth';
+
+/** Demo logins are listed in development, and on the public test version (server DEMO_MODE=true). */
+const SHOW_DEMO_DEV = import.meta.env.DEV;
 
 const DEMO = [
   ['admin@marlowe.test', 'Administrator'],
@@ -15,7 +19,12 @@ const DEMO = [
 
 export function Login() {
   const { login } = useAuth();
-  const [email, setEmail] = useState('admin@marlowe.test');
+  const meta = useMeta();
+  const SHOW_DEMO = SHOW_DEMO_DEV || !!meta?.demo;
+  const [email, setEmail] = useState(SHOW_DEMO_DEV ? 'admin@marlowe.test' : '');
+  useEffect(() => {
+    if (meta?.demo) setEmail((e) => e || 'admin@marlowe.test');
+  }, [meta?.demo]);
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -84,9 +93,10 @@ export function Login() {
             {busy ? 'Signing in…' : 'Sign in'} <ArrowRight size={16} />
           </button>
 
+          {SHOW_DEMO && (
           <div className="demo-accounts">
             <div className="eyebrow" style={{ marginBottom: 6 }}>
-              Demo accounts · password <span className="mono">marlowe123</span>
+              {meta?.demo ? 'Test version — pick a role to try' : 'Demo accounts'} · password <span className="mono">marlowe123</span>
             </div>
             {DEMO.map(([e, r]) => (
               <button
@@ -102,6 +112,7 @@ export function Login() {
               </button>
             ))}
           </div>
+          )}
         </form>
       </div>
     </div>

@@ -3,6 +3,8 @@ import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { Menu, ShoppingBag, X } from 'lucide-react';
 import { useApi } from '../lib/hooks';
 import { setCurrency } from '../lib/format';
+import { FeedbackButton, useMeta } from '../components/Feedback';
+import { CartDrawer } from './Cart';
 import './site.css';
 
 export interface PublicInfo {
@@ -17,7 +19,7 @@ export interface PublicInfo {
     vat_rate: number;
     service_rate: number;
   };
-  room_types: { id: number; name: string; code: string; base_rate: number; capacity: number; description: string; images: string[] }[];
+  room_types: { id: number; name: string; code: string; base_rate: number; capacity: number; description: string; images: string[]; features: string[] }[];
   resources: { id: number; kind: string; label: string; capacity: number; price: number }[];
   club_nights: { id: number; title: string; date: string; dj: string | null; cover_charge: number; capacity: number; status: string }[];
 }
@@ -32,43 +34,90 @@ export interface BasketLine {
   img?: string | null;
 }
 
+export type CartTab = 'basket' | 'orders';
+
+/** Stays this device booked or looked up — lets "My booking" reopen them in one tap. */
+export interface SavedStay {
+  code: string;
+  last_name: string;
+}
+
 interface BasketState {
   lines: BasketLine[];
-  add: (l: Omit<BasketLine, 'qty'>) => void;
+  add: (l: Omit<BasketLine, 'qty'>, qty?: number) => void;
   setQty: (id: number, qty: number) => void;
   clear: () => void;
   count: number;
+  /** cart panel */
+  cartOpen: boolean;
+  cartTab: CartTab;
+  openCart: (tab?: CartTab) => void;
+  closeCart: () => void;
+  setCartTab: (t: CartTab) => void;
+  /** order codes placed (or tracked) on this device, newest first */
+  orders: string[];
+  rememberOrder: (code: string) => void;
+  stays: SavedStay[];
+  rememberStay: (s: SavedStay) => void;
+  forgetStay: (code: string) => void;
 }
 
 const BasketContext = createContext<BasketState | null>(null);
 export const useBasket = () => useContext(BasketContext)!;
 const BASKET_KEY = 'marlowe.basket';
+const ORDERS_KEY = 'marlowe.orders';
+const STAYS_KEY = 'marlowe.stays';
 
-function BasketProvider({ children }: { children: ReactNode }) {
-  const [lines, setLines] = useState<BasketLine[]>(() => {
+/** localStorage-backed state that degrades to memory when storage is unavailable. */
+function useStored<T>(key: string, fallback: T) {
+  const [value, setValue] = useState<T>(() => {
     try {
-      return JSON.parse(localStorage.getItem(BASKET_KEY) ?? '[]');
+      const raw = localStorage.getItem(key);
+      return raw ? (JSON.parse(raw) as T) : fallback;
     } catch {
-      return [];
+      return fallback;
     }
   });
   useEffect(() => {
     try {
-      localStorage.setItem(BASKET_KEY, JSON.stringify(lines));
+      localStorage.setItem(key, JSON.stringify(value));
     } catch {
       /* storage unavailable */
     }
-  }, [lines]);
+  }, [key, value]);
+  return [value, setValue] as const;
+}
+
+function BasketProvider({ children }: { children: ReactNode }) {
+  const [lines, setLines] = useStored<BasketLine[]>(BASKET_KEY, []);
+  const [orders, setOrders] = useStored<string[]>(ORDERS_KEY, []);
+  const [stays, setStays] = useStored<SavedStay[]>(STAYS_KEY, []);
+  const [cartOpen, setCartOpen] = useState(false);
+  const [cartTab, setCartTab] = useState<CartTab>('basket');
+
   const value: BasketState = {
     lines,
     count: lines.reduce((s, l) => s + l.qty, 0),
-    add: (l) =>
+    add: (l, qty = 1) =>
       setLines((s) => {
         const hit = s.find((x) => x.id === l.id);
-        return hit ? s.map((x) => (x.id === l.id ? { ...x, qty: x.qty + 1 } : x)) : [...s, { ...l, qty: 1 }];
+        return hit ? s.map((x) => (x.id === l.id ? { ...x, qty: x.qty + qty } : x)) : [...s, { ...l, qty }];
       }),
     setQty: (id, qty) => setLines((s) => (qty <= 0 ? s.filter((x) => x.id !== id) : s.map((x) => (x.id === id ? { ...x, qty } : x)))),
     clear: () => setLines([]),
+    cartOpen,
+    cartTab,
+    openCart: (tab) => {
+      setCartTab(tab ?? (lines.length === 0 && orders.length > 0 ? 'orders' : 'basket'));
+      setCartOpen(true);
+    },
+    closeCart: () => setCartOpen(false),
+    setCartTab,
+    orders,
+    rememberOrder: (code) => setOrders((o) => [code, ...o.filter((c) => c !== code)].slice(0, 30)),
+    stays,
+    rememberStay: (st) => setStays((list) => [{ code: st.code.toUpperCase(), last_name: st.last_name }, ...list.filter((x) => x.code !== st.code.toUpperCase())].slice(0, 10)),
+    forgetStay: (code) => setStays((list) => list.filter((x) => x.code !== code)),
   };
   return <BasketContext.Provider value={value}>{children}</BasketContext.Provider>;
 }
@@ -94,6 +143,7 @@ export function SiteLayout() {
 function SiteShell() {
   const { data } = usePublicInfo();
   const basket = useBasket();
+  const meta = useMeta();
   const [open, setOpen] = useState(false);
   const loc = useLocation();
   useEffect(() => {
@@ -105,8 +155,15 @@ function SiteShell() {
   return (
     <div className="site">
       <div className="site-announce">
-        Book direct for our best rate · pay with MoMo or card ·{' '}
-        <Link to="/visit/stay">Check dates</Link>
+        {meta?.demo ? (
+          <>
+            Test version — bookings and orders here aren’t real. Try anything, then tell us what you think with the Feedback button.
+          </>
+        ) : (
+          <>
+            Book direct for our best rate · pay with MoMo or card · <Link to="/visit/stay">Check dates</Link>
+          </>
+        )}
       </div>
       <header className="site-nav">
         <div className="inner">
@@ -123,10 +180,10 @@ function SiteShell() {
             <NavLink to="/visit/booking">My booking</NavLink>
           </nav>
           <span className="grow" />
-          <Link to="/visit/dine#basket" className="icon-btn cart-btn" aria-label="Your order">
+          <button type="button" className="icon-btn cart-btn" aria-label={`Your basket and orders${basket.count ? `, ${basket.count} items` : ''}`} onClick={() => basket.openCart()}>
             <ShoppingBag size={19} />
             {basket.count > 0 && <span className="n">{basket.count}</span>}
-          </Link>
+          </button>
           <Link to="/visit/stay" className="btn">
             Book a stay
           </Link>
@@ -181,6 +238,39 @@ function SiteShell() {
           </div>
         </div>
       </footer>
+      <CartDrawer />
+      <FeedbackButton area="site" />
+    </div>
+  );
+}
+
+export const MAX_NIGHTS = 30;
+
+/** Editable length of stay: − / number / +, or type a number. Moves the departure date. */
+export const clampNights = (n: number) => Math.min(MAX_NIGHTS, Math.max(1, Math.round(n) || 1));
+
+export function NightsStepper({ nights, onChange, onStep }: { nights: number; onChange: (n: number) => void; onStep: (delta: 1 | -1) => void }) {
+  const clamp = clampNights;
+  return (
+    <div className="f nights-f">
+      <label htmlFor="nights-input">Nights</label>
+      <div className="stepper">
+        <button type="button" onClick={() => onStep(-1)} disabled={nights <= 1} aria-label="One night fewer">
+          −
+        </button>
+        <input
+          id="nights-input"
+          type="number"
+          inputMode="numeric"
+          min={1}
+          max={MAX_NIGHTS}
+          value={nights}
+          onChange={(e) => e.target.value !== '' && onChange(clamp(Number(e.target.value)))}
+        />
+        <button type="button" onClick={() => onStep(1)} disabled={nights >= MAX_NIGHTS} aria-label="One night more">
+          +
+        </button>
+      </div>
     </div>
   );
 }

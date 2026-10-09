@@ -4,8 +4,9 @@ import type { NextFunction, Request, Response } from 'express';
 import { get } from './db.ts';
 import { HttpError } from './util.ts';
 import { can, type Area, type Role } from './permissions.ts';
+import { config } from './config.ts';
 
-const SECRET = process.env.JWT_SECRET ?? 'keyhouse-dev-secret-change-me';
+const SECRET = config.jwtSecret;
 
 export interface AuthUser {
   id: number;

@@ -389,9 +389,23 @@ export function migrate() {
   );
   `);
 
+  db.exec(`
+  CREATE TABLE IF NOT EXISTS feedback (
+    id INTEGER PRIMARY KEY,
+    rating INTEGER,
+    message TEXT NOT NULL,
+    page TEXT,
+    area TEXT NOT NULL DEFAULT 'site',
+    role TEXT,
+    name TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  `);
+
   // additive column migrations for databases created before photos existed
   addColumn('room_types', 'images', "TEXT NOT NULL DEFAULT '[]'");
   addColumn('menu_items', 'image_url', 'TEXT');
+  addColumn('room_types', 'features', "TEXT NOT NULL DEFAULT '[]'");
 }
 
 function addColumn(table: string, column: string, type: string) {
@@ -399,13 +413,15 @@ function addColumn(table: string, column: string, type: string) {
   if (!cols.some((c) => c.name === column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
 }
 
-/** room_types.images is stored as a JSON array of URLs. */
-export function withImages<T extends { images?: unknown }>(row: T): T & { images: string[] } {
-  let images: string[] = [];
+function jsonList(v: unknown): string[] {
   try {
-    images = typeof row.images === 'string' ? JSON.parse(row.images) : Array.isArray(row.images) ? (row.images as string[]) : [];
+    return typeof v === 'string' ? JSON.parse(v) : Array.isArray(v) ? (v as string[]) : [];
   } catch {
-    images = [];
+    return [];
   }
-  return { ...row, images };
+}
+
+/** room_types.images (photo URLs) and room_types.features (short labels) are stored as JSON arrays. */
+export function withImages<T extends { images?: unknown; features?: unknown }>(row: T): T & { images: string[]; features: string[] } {
+  return { ...row, images: jsonList(row.images), features: jsonList(row.features) };
 }

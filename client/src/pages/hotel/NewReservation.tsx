@@ -194,13 +194,28 @@ export function NewReservation({
         <div className="grid-2">
           <Field label="Check-in">
             <input type="date" value={checkIn} onChange={(e) => {
+              if (!e.target.value) return;
+              const n = Math.max(1, nights);
               setCheckIn(e.target.value);
-              if (e.target.value >= checkOut) setCheckOut(addDays(e.target.value, 1));
+              setCheckOut(addDays(e.target.value, n));
             }} />
           </Field>
           <Field label="Check-out">
-            <input type="date" value={checkOut} min={addDays(checkIn, 1)} onChange={(e) => setCheckOut(e.target.value)} />
+            <input type="date" value={checkOut} min={addDays(checkIn, 1)} onChange={(e) => e.target.value > checkIn && setCheckOut(e.target.value)} />
           </Field>
+          <Field label="Nights">
+            <input
+              type="number"
+              min={1}
+              max={60}
+              value={Math.max(1, nights)}
+              onChange={(e) => {
+                const n = Math.min(60, Math.max(1, Number(e.target.value) || 1));
+                setCheckOut(addDays(checkIn, n));
+              }}
+            />
+          </Field>
+          <div />
           <Field label="Adults">
             <input type="number" min={1} value={adults} onChange={(e) => setAdults(Number(e.target.value))} />
           </Field>

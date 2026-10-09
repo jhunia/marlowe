@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Plus } from 'lucide-react';
 import { useAction, useApi } from '../../lib/hooks';
-import { money } from '../../lib/format';
+import { fmtDateTime, money } from '../../lib/format';
 import type { Role, Room, RoomType, Settings, User } from '../../lib/types';
 import { Field, Loading, Modal, PageHead, Panel, Stamp, Tabs } from '../../components/ui';
 import { ROLE_LABELS } from '../../lib/permissions';
@@ -9,7 +9,7 @@ import { photo } from '../../lib/img';
 import { useAuth } from '../../lib/auth';
 
 export function SettingsPage() {
-  const [tab, setTab] = useState<'property' | 'users' | 'rooms'>('property');
+  const [tab, setTab] = useState<'property' | 'users' | 'rooms' | 'feedback'>('property');
   return (
     <div className="venue-office">
       <PageHead eyebrow="Back office · Administration" title="Settings" />
@@ -20,11 +20,13 @@ export function SettingsPage() {
           { value: 'property', label: 'Property & tax' },
           { value: 'users', label: 'Users & roles' },
           { value: 'rooms', label: 'Rooms inventory' },
+          { value: 'feedback', label: 'Feedback' },
         ]}
       />
       {tab === 'property' && <PropertyTab />}
       {tab === 'users' && <UsersTab />}
       {tab === 'rooms' && <RoomsTab />}
+      {tab === 'feedback' && <FeedbackTab />}
     </div>
   );
 }
@@ -238,19 +240,21 @@ function RoomsTab() {
   const [r, setR] = useState({ number: '', floor: 1, room_type_id: '' as number | '' });
   const inv = ['/room-types', '/rooms', '/tape-chart', '/availability', '/dashboard'];
   const addType = useAction('post', '/room-types', { invalidate: inv, success: 'Room type added', onSuccess: () => setT({ name: '', code: '', base_rate: 0, capacity: 2, description: '' }) });
-  const saveType = useAction<{ id: number; base_rate?: number; images?: string[] }>('patch', (b) => `/room-types/${b.id}`, { invalidate: inv, success: 'Room type updated' });
+  const saveType = useAction<{ id: number; base_rate?: number; images?: string[]; features?: string[] }>('patch', (b) => `/room-types/${b.id}`, { invalidate: inv, success: 'Room type updated' });
   const [photosFor, setPhotosFor] = useState<RoomType | null>(null);
   const [photoText, setPhotoText] = useState('');
+  const [featText, setFeatText] = useState('');
   const addRoom = useAction('post', '/rooms', { invalidate: inv, success: 'Room added', onSuccess: () => setR({ ...r, number: '' }) });
 
   if (types.isLoading || rooms.isLoading) return <Loading />;
   const links = photoText.split('\n').map((l) => l.trim()).filter(Boolean);
+  const feats = featText.split('\n').map((l) => l.trim()).filter(Boolean);
   return (
     <div className="dash-grid">
       <Modal
         open={!!photosFor}
         onClose={() => setPhotosFor(null)}
-        title={`Photos · ${photosFor?.name ?? ''}`}
+        title={`Photos & features · ${photosFor?.name ?? ''}`}
         footer={
           <>
             <button className="btn ghost" onClick={() => setPhotosFor(null)}>
@@ -259,11 +263,11 @@ function RoomsTab() {
             <button
               className="btn"
               onClick={() => {
-                if (photosFor) saveType.mutate({ id: photosFor.id, images: links });
+                if (photosFor) saveType.mutate({ id: photosFor.id, images: links, features: feats });
                 setPhotosFor(null);
               }}
             >
-              Save photos
+              Save
             </button>
           </>
         }
@@ -276,6 +280,9 @@ function RoomsTab() {
           </div>
           <Field label="Photo links — one per line" hint="The first photo is the cover on the website. Up to 8.">
             <textarea rows={6} value={photoText} onChange={(e) => setPhotoText(e.target.value)} placeholder="https://…" />
+          </Field>
+          <Field label="Features — one per line" hint="Shown on the room cards: bed, size, view, what’s included. The first four show on the card; all show when a guest picks the room. Up to 12.">
+            <textarea rows={6} value={featText} onChange={(e) => setFeatText(e.target.value)} placeholder={'King bed\n28 m²\nGarden view\nBreakfast included'} />
           </Field>
         </div>
       </Modal>
@@ -305,9 +312,10 @@ function RoomsTab() {
                         onClick={() => {
                           setPhotosFor(x);
                           setPhotoText((x.images ?? []).join('\n'));
+                          setFeatText((x.features ?? []).join('\n'));
                         }}
                       >
-                        Photos ({x.images?.length ?? 0})
+                        Photos ({x.images?.length ?? 0}) · Features ({x.features?.length ?? 0})
                       </button>
                     </span>
                   </div>
@@ -374,5 +382,83 @@ function RoomsTab() {
         </div>
       </Panel>
     </div>
+  );
+}
+
+interface FeedbackRow {
+  id: number;
+  rating: number | null;
+  message: string;
+  page: string | null;
+  area: 'site' | 'console';
+  role: string | null;
+  name: string | null;
+  created_at: string;
+}
+
+function FeedbackTab() {
+  const { data, isLoading } = useApi<FeedbackRow[]>('/feedback');
+  if (isLoading) return <Loading />;
+  const rows = data ?? [];
+  const rated = rows.filter((r) => r.rating);
+  const avg = rated.length ? rated.reduce((s, r) => s + (r.rating ?? 0), 0) / rated.length : 0;
+  const exportCsv = () => {
+    const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const csv = [['when', 'rating', 'area', 'page', 'role', 'name', 'message'], ...rows.map((r) => [r.created_at, r.rating, r.area, r.page, r.role, r.name, r.message])]
+      .map((line) => line.map(esc).join(','))
+      .join('\n');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+    a.download = 'marlowe-feedback.csv';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+  return (
+    <Panel
+      title={`Tester feedback · ${rows.length}${rated.length ? ` · average ${avg.toFixed(1)}/5` : ''}`}
+      flush
+      actions={
+        <button className="btn sm ghost" disabled={!rows.length} onClick={exportCsv}>
+          Export CSV
+        </button>
+      }
+    >
+      {rows.length === 0 ? (
+        <div className="empty">
+          <h4>No feedback yet.</h4>
+          Share the link with testers — the Feedback button is on every page of the test version.
+        </div>
+      ) : (
+        <div className="table-wrap">
+          <table className="ledger-table">
+            <thead>
+              <tr>
+                <th>When</th>
+                <th>Rating</th>
+                <th>Where</th>
+                <th>Feedback</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.id}>
+                  <td className="nowrap small">{fmtDateTime(r.created_at)}</td>
+                  <td>{r.rating ? <Stamp tone={r.rating >= 4 ? 'ok' : r.rating === 3 ? 'warn' : 'bad'}>{r.rating}/5</Stamp> : <span className="muted">—</span>}</td>
+                  <td className="small">
+                    <b>{r.area === 'site' ? 'Guest site' : 'Staff console'}</b>
+                    <div className="muted mono">{r.page}</div>
+                    {r.role && <div className="muted">as {r.role.replace('_', ' ')}</div>}
+                  </td>
+                  <td style={{ whiteSpace: 'pre-wrap', maxWidth: 560 }}>
+                    {r.message}
+                    {r.name && <div className="small muted">— {r.name}</div>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Panel>
   );
 }

@@ -186,6 +186,12 @@ office.patch('/users/:id', requireArea('settings'), (req, res) => {
   res.json(get('SELECT id, name, email, role, active FROM users WHERE id = ?', u.id));
 });
 
+/* -------------------------------------------------------------- feedback */
+
+office.get('/feedback', requireArea('settings'), (_req, res) => {
+  res.json(all('SELECT * FROM feedback ORDER BY created_at DESC, id DESC LIMIT 1000'));
+});
+
 /* -------------------------------------------------------------- settings */
 
 export const SETTING_KEYS = ['property_name', 'currency', 'vat_rate', 'service_rate', 'address', 'phone', 'email', 'check_in_time', 'check_out_time'] as const;

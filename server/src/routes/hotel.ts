@@ -22,23 +22,30 @@ hotel.get('/room-types', (_req, res) => {
   res.json(all(`SELECT t.*, (SELECT COUNT(*) FROM rooms r WHERE r.room_type_id = t.id) AS room_count FROM room_types t ORDER BY base_rate`).map(withImages));
 });
 
+/** Short labels guests compare rooms on: "King bed", "28 m²", "City view"… */
+const FEATURES = z.array(z.string().trim().min(1).max(40)).max(12);
+
 hotel.post('/room-types', requireArea('settings'), (req, res) => {
-  const b = parse(z.object({ name: z.string().min(1), code: z.string().min(1).max(6), base_rate: z.number().min(0), capacity: z.number().int().min(1), description: z.string().default(''), images: z.array(z.string().url()).max(8).default([]) }), req.body);
+  const b = parse(z.object({ name: z.string().min(1), code: z.string().min(1).max(6), base_rate: z.number().min(0), capacity: z.number().int().min(1), description: z.string().default(''), images: z.array(z.string().url()).max(8).default([]), features: FEATURES.default([]) }), req.body);
   if (get('SELECT 1 FROM room_types WHERE code = ?', b.code)) throw conflict('That code is already used');
-  const { id } = run('INSERT INTO room_types (name, code, base_rate, capacity, description, images) VALUES (?, ?, ?, ?, ?, ?)', b.name, b.code, b.base_rate, b.capacity, b.description, JSON.stringify(b.images));
+  const { id } = run(
+    'INSERT INTO room_types (name, code, base_rate, capacity, description, images, features) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    b.name, b.code, b.base_rate, b.capacity, b.description, JSON.stringify(b.images), JSON.stringify(b.features),
+  );
   res.status(201).json(withImages(get('SELECT * FROM room_types WHERE id = ?', id)));
 });
 
 hotel.patch('/room-types/:id', requireArea('settings'), (req, res) => {
-  const b = parse(z.object({ base_rate: z.number().min(0).optional(), name: z.string().min(1).optional(), description: z.string().optional(), images: z.array(z.string().url('must be a full https:// link')).max(8).optional() }), req.body);
+  const b = parse(z.object({ base_rate: z.number().min(0).optional(), name: z.string().min(1).optional(), description: z.string().optional(), images: z.array(z.string().url('must be a full https:// link')).max(8).optional(), features: FEATURES.optional() }), req.body);
   const t = get('SELECT * FROM room_types WHERE id = ?', req.params.id);
   if (!t) throw notFound('Room type');
   run(
-    'UPDATE room_types SET base_rate = COALESCE(?, base_rate), name = COALESCE(?, name), description = COALESCE(?, description), images = COALESCE(?, images) WHERE id = ?',
+    'UPDATE room_types SET base_rate = COALESCE(?, base_rate), name = COALESCE(?, name), description = COALESCE(?, description), images = COALESCE(?, images), features = COALESCE(?, features) WHERE id = ?',
     b.base_rate,
     b.name,
     b.description,
     b.images ? JSON.stringify(b.images) : null,
+    b.features ? JSON.stringify(b.features) : null,
     req.params.id,
   );
   res.json(withImages(get('SELECT * FROM room_types WHERE id = ?', req.params.id)));

@@ -38,6 +38,7 @@ export interface RoomType {
   description: string;
   room_count?: number;
   images: string[];
+  features: string[];
 }
 
 export type RoomStatus = 'vacant_clean' | 'vacant_dirty' | 'inspected' | 'occupied' | 'out_of_order';

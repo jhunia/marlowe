@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { Minus, Plus } from 'lucide-react';
 import { useApi } from '../lib/hooks';
 import { api } from '../lib/api';
-import { addDays, fmtDate, isoDate, money } from '../lib/format';
+import { addDays, fmtDate, isoDate, price } from '../lib/format';
+import { DateInput } from './DateInput';
 import { Field, Segmented } from '../components/ui';
-import { useBasket, usePublicInfo } from './SiteLayout';
+import { useBasket } from './SiteLayout';
+import { CheckoutPanel } from './Cart';
 import { photo } from '../lib/img';
 
 interface PublicMenu {
@@ -45,6 +47,7 @@ function OrderFood() {
   const { data: menu } = useApi<PublicMenu>('/public/menu');
   const basket = useBasket();
   const qtyOf = (id: number) => basket.lines.find((l) => l.id === id)?.qty ?? 0;
+  const basketTotal = basket.lines.reduce((s, l) => s + l.price * l.qty, 0);
 
   return (
     <div className="menu-layout">
@@ -71,7 +74,7 @@ function OrderFood() {
                       {i.description && <p>{i.description}</p>}
                     </div>
                     <div className="stack tight" style={{ alignItems: 'flex-end' }}>
-                      <span className="p">{money(i.price)}</span>
+                      <span className="p">{price(i.price)}</span>
                       {!i.available ? (
                         <span className="small muted">Sold out today</span>
                       ) : q ? (
@@ -96,140 +99,23 @@ function OrderFood() {
           </div>
         ))}
       </div>
-      <Basket />
-    </div>
-  );
-}
-
-function Basket() {
-  const basket = useBasket();
-  const { data: info } = usePublicInfo();
-  const nav = useNavigate();
-  const { data: menu } = useApi<PublicMenu>('/public/menu');
-  const imgOf = (id: number) => menu?.items.find((m) => m.id === id)?.image_url;
-  const [params] = useSearchParams();
-  const [to, setTo] = useState<'pickup' | 'room' | 'poolside'>(params.get('to') === 'room' ? 'room' : 'pickup');
-  const [f, setF] = useState({ name: '', phone: '', room_code: params.get('code') ?? '', last_name: params.get('last') ?? '', notes: '' });
-  const [err, setErr] = useState('');
-  const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    if (window.location.hash === '#basket') document.getElementById('basket')?.scrollIntoView({ behavior: 'smooth' });
-  }, []);
-
-  const sub = basket.lines.reduce((s, l) => s + l.price * l.qty, 0);
-  const svc = sub * ((info?.property.service_rate ?? 0) / 100);
-  const vat = (sub + svc) * ((info?.property.vat_rate ?? 0) / 100);
-
-  const place = async () => {
-    setErr('');
-    setBusy(true);
-    try {
-      const r = await api.post<{ code: string }>('/public/order', {
-        ...f,
-        fulfilment: to,
-        room_code: to === 'room' ? f.room_code : undefined,
-        last_name: to === 'room' ? f.last_name : undefined,
-        items: basket.lines.map((l) => ({ menu_item_id: l.id, qty: l.qty })),
-      });
-      basket.clear();
-      nav(`/visit/order/${r.code}`);
-    } catch (x) {
-      setErr((x as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <aside className="basket" id="basket">
-      <div className="basket-head">
-        <h4>Your order</h4>
-        <span className="small muted">{basket.count} item{basket.count === 1 ? '' : 's'}</span>
-      </div>
-      {basket.lines.length === 0 ? (
-        <div className="empty small">Add a few dishes from the menu.</div>
-      ) : (
-        <>
-          <div className="basket-lines">
-            {basket.lines.map((l) => (
-              <div key={l.id} className="basket-line">
-                {(l.img ?? imgOf(l.id)) ? <img className="basket-thumb" src={photo(l.img ?? imgOf(l.id), 120)} alt="" /> : <span className="basket-thumb" />}
-                <span>
-                  {l.name}
-                  <div className="small muted mono">{money(l.price * l.qty)}</div>
-                </span>
-                <span className="qty-ctl">
-                  <button onClick={() => basket.setQty(l.id, l.qty - 1)} aria-label="Remove one">
-                    <Minus size={12} />
-                  </button>
-                  <span>{l.qty}</span>
-                  <button onClick={() => basket.setQty(l.id, l.qty + 1)} aria-label="Add one">
-                    <Plus size={12} />
-                  </button>
-                </span>
-              </div>
-            ))}
-          </div>
-          <div className="basket-foot stack tight">
-            <div className="row">
-              <span>Subtotal</span>
-              <span className="mono">{money(sub)}</span>
-            </div>
-            <div className="row">
-              <span>Service ({info?.property.service_rate}%)</span>
-              <span className="mono">{money(svc)}</span>
-            </div>
-            <div className="row">
-              <span>Taxes & levies ({info?.property.vat_rate}%)</span>
-              <span className="mono">{money(vat)}</span>
-            </div>
-            <div className="row grand">
-              <span>Total</span>
-              <span>{money(sub + svc + vat)}</span>
-            </div>
-
-            <div style={{ marginTop: 10 }}>
-              <Segmented
-                value={to}
-                onChange={setTo}
-                options={[
-                  { value: 'pickup', label: 'Pickup' },
-                  { value: 'room', label: 'To my room' },
-                  { value: 'poolside', label: 'Poolside' },
-                ]}
-              />
-            </div>
-            {err && <div className="form-error">{err}</div>}
-            <Field label="Name">
-              <input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} autoComplete="name" />
-            </Field>
-            <Field label="Phone">
-              <input type="tel" value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} autoComplete="tel" />
-            </Field>
-            {to === 'room' && (
-              <div className="grid-2">
-                <Field label="Booking code">
-                  <input value={f.room_code} onChange={(e) => setF({ ...f, room_code: e.target.value.toUpperCase() })} placeholder="MR-XXXXX" />
-                </Field>
-                <Field label="Last name">
-                  <input value={f.last_name} onChange={(e) => setF({ ...f, last_name: e.target.value })} />
-                </Field>
-              </div>
-            )}
-            <Field label="Notes for the kitchen">
-              <input value={f.notes} onChange={(e) => setF({ ...f, notes: e.target.value })} placeholder="Allergies, spice level…" />
-            </Field>
-            <button className="btn venue lg block" disabled={busy || !f.name || !f.phone} onClick={place}>
-              {busy ? 'Sending to the kitchen…' : 'Place order'}
-            </button>
-            <p className="small muted" style={{ margin: 0 }}>
-              {to === 'room' ? 'Added to your room bill — settle at checkout.' : to === 'poolside' ? 'Delivered to the Skydeck — pay your server.' : 'Pay when you collect at the Ember & Salt counter.'}
-            </p>
-          </div>
-        </>
+      <aside className="basket" id="basket">
+        <div className="basket-head">
+          <h4>Your order</h4>
+          <span className="small muted">
+            {basket.count} item{basket.count === 1 ? '' : 's'}
+          </span>
+        </div>
+        <CheckoutPanel />
+      </aside>
+      {basket.count > 0 && (
+        <button className="basket-bar" onClick={() => basket.openCart('basket')}>
+          <span className="n">{basket.count}</span>
+          View basket
+          <b>{price(basketTotal)}</b>
+        </button>
       )}
-    </aside>
+    </div>
   );
 }
 
@@ -242,6 +128,12 @@ const STAGES = [
 
 export function OrderTrack() {
   const { code } = useParams();
+  const basket = useBasket();
+  // opening a tracking link on this device adds it to "My orders"
+  useEffect(() => {
+    if (code) basket.rememberOrder(code.toUpperCase());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [code]);
   const { data, error } = useApi<{ code: string; stage: string; total: number; fulfilment: string; items: { name: string; qty: number; unit_price: number }[] }>(`/public/order/${code}`, {
     refetchInterval: 10000,
   });
@@ -268,18 +160,23 @@ export function OrderTrack() {
               <span>
                 {i.qty}× {i.name}
               </span>
-              <span className="mono">{money(i.qty * i.unit_price)}</span>
+              <span>{price(i.qty * i.unit_price)}</span>
             </div>
           ))}
           <div className="row between" style={{ paddingTop: 10, fontWeight: 800, fontSize: 20 }}>
             <span>Total incl. service & taxes</span>
-            <span>{money(data.total)}</span>
+            <span>{price(data.total)}</span>
           </div>
         </div>
         <p className="small muted">This page updates by itself. Keep it open, or bookmark it.</p>
-        <Link to="/visit/dine" className="btn ghost">
-          Back to the menu
-        </Link>
+        <div className="row wrap">
+          <button className="btn venue" onClick={() => basket.openCart('orders')}>
+            All my orders
+          </button>
+          <Link to="/visit/dine" className="btn ghost">
+            Back to the menu
+          </Link>
+        </div>
       </div>
     </section>
   );
@@ -323,7 +220,7 @@ function BookTable() {
       {err && <div className="form-error">{err}</div>}
       <div className="grid-2">
         <Field label="Date">
-          <input type="date" required value={f.date} min={isoDate()} max={addDays(isoDate(), 90)} onChange={(e) => setF({ ...f, date: e.target.value })} />
+          <DateInput required value={f.date} min={isoDate()} max={addDays(isoDate(), 90)} onChange={(v) => setF({ ...f, date: v })} />
         </Field>
         <Field label="Time">
           <select value={f.time} onChange={(e) => setF({ ...f, time: e.target.value })}>

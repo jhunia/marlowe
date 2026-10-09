@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ArrowRight } from 'lucide-react';
-import { addDays, isoDate, money, parseDate } from '../lib/format';
+import { addDays, isoDate, nightsBetween, parseDate, price } from '../lib/format';
+import { DateInput } from './DateInput';
 import { photo, VENUE_PHOTOS } from '../lib/img';
-import { usePublicInfo } from './SiteLayout';
+import { clampNights, NightsStepper, usePublicInfo } from './SiteLayout';
+import { FeatureList } from './Stay';
 
 const VENUES = [
   { to: '/visit/stay', cls: 'venue-hotel', img: VENUE_PHOTOS.hotel, n: '01 · Floors 1–4', title: 'The Hotel', text: 'Classic kings to a top-floor penthouse, with rain showers and deep sleep.', cta: 'Rooms & rates' },
@@ -31,7 +33,8 @@ export function Home() {
             <p className="lead">
               Twenty-eight rooms in Airport Residential, a wood-fired kitchen downstairs, a pool and club on the roof, and a lawn made for the parties you’ll talk about for years.
             </p>
-            <div className="row wrap">
+            <p className="lead lead-short">28 rooms, a wood-fired kitchen, a rooftop pool & club and a garden — all at one address in Accra.</p>
+            <div className="row wrap hero-ctas">
               <Link to="/visit/stay" className="btn lg brand">
                 Book a room
               </Link>
@@ -76,21 +79,28 @@ export function Home() {
         >
           <div className="f">
             <label htmlFor="bb-in">Arrive</label>
-            <input
+            <DateInput
               id="bb-in"
-              type="date"
               value={ci}
               min={isoDate()}
-              onChange={(e) => {
-                setCi(e.target.value);
-                if (e.target.value >= co) setCo(addDays(e.target.value, 1));
+              onChange={(v) => {
+                if (!v) return;
+                // keep the same length of stay when the arrival moves
+                const n = Math.max(1, nightsBetween(ci, co));
+                setCi(v);
+                setCo(addDays(v, n));
               }}
             />
           </div>
           <div className="f">
             <label htmlFor="bb-out">Depart</label>
-            <input id="bb-out" type="date" value={co} min={addDays(ci, 1)} onChange={(e) => setCo(e.target.value)} />
+            <DateInput id="bb-out" value={co} min={addDays(ci, 1)} onChange={(v) => v > ci && setCo(v)} />
           </div>
+          <NightsStepper
+            nights={Math.max(1, nightsBetween(ci, co))}
+            onChange={(n) => setCo(addDays(ci, n))}
+            onStep={(d) => setCo((prev) => addDays(ci, clampNights(Math.max(1, nightsBetween(ci, prev)) + d)))}
+          />
           <div className="f">
             <label htmlFor="bb-g">Guests</label>
             <select id="bb-g" value={guests} onChange={(e) => setGuests(Number(e.target.value))}>
@@ -153,10 +163,11 @@ export function Home() {
                 <div>
                   <h3>{t.name}</h3>
                   <div className="muted">{t.description}</div>
+                  <FeatureList features={t.features} limit={4} />
                 </div>
                 <div className="price">
                   <span className="small muted">from</span>
-                  <b>{money(t.base_rate)}</b>
+                  <b>{price(t.base_rate)}</b>
                   <span className="small muted">/ night</span>
                 </div>
               </Link>
@@ -184,7 +195,7 @@ export function Home() {
                 <div>
                   <h4>{n.title}</h4>
                   <div style={{ opacity: 0.8 }}>
-                    {n.dj ?? 'Line-up TBC'} · cover {money(n.cover_charge, { compact: true })}
+                    {n.dj ?? 'Line-up TBC'} · cover {price(n.cover_charge)}
                   </div>
                 </div>
                 <Link to={`/visit/rooftop?night=${n.id}#club`} className="btn light">

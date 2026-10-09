@@ -24,6 +24,13 @@ export function money(n: number | null | undefined, opts: { compact?: boolean; s
   return `${sign}${currency}${s}`;
 }
 
+/** Guest-facing prices: whole cedis drop the ".00" (GH₵1,450), anything else keeps pesewas. */
+export function price(n: number | null | undefined, opts: { compact?: boolean } = {}) {
+  const v = Math.round(Number(n ?? 0) * 100) / 100;
+  if (opts.compact || !Number.isInteger(v)) return money(v, opts);
+  return `${v < 0 ? '−' : ''}${currency}${Math.abs(v).toLocaleString('en-US')}`;
+}
+
 /** Local-date ISO string (YYYY-MM-DD) — never UTC-shifted. */
 export function isoDate(d: Date = new Date()) {
   const y = d.getFullYear();

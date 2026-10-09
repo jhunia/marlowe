@@ -597,3 +597,36 @@ table.ledger-table { width: 100%; border-collapse: collapse; font-size: 14px; }
   .detail-list { grid-template-columns: 100px 1fr; }
   .hbar { grid-template-columns: 90px 1fr 70px; }
 }
+
+/* --- test version: feedback button + notices ------------------------------ */
+.feedback-fab { position: fixed; left: 20px; bottom: 20px; z-index: 70; display: inline-flex; align-items: center; gap: 8px; height: 44px; padding: 0 18px; border-radius: 999px; border: 0; background: var(--brand); color: #fff; font-weight: 700; font-size: 14px; cursor: pointer; box-shadow: 0 12px 28px -10px rgba(255, 90, 54, 0.7); }
+.feedback-fab:hover { transform: translateY(-2px); }
+.shell .feedback-fab { left: calc(var(--sidebar) + 20px); }
+@media (max-width: 900px) { .shell .feedback-fab { left: 16px; } }
+.demo-pill { font-size: 12px; font-weight: 700; background: var(--sun-tint); color: #8a5300; padding: 4px 12px; border-radius: 999px; white-space: nowrap; }
+@media (max-width: 700px) { .demo-pill { display: none; } }
+.rating-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.rating-row button { border: 1px solid var(--rule-strong); background: #fff; border-radius: 12px; padding: 8px 4px; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.rating-row button b { font-family: var(--f-display); font-size: 18px; }
+.rating-row button span { font-size: 11px; color: var(--muted); }
+.rating-row button.on { background: var(--ink); border-color: var(--ink); color: #fff; }
+.rating-row button.on span { color: #d1d5db; }
+
+/* --- phones: side-by-side layouts stack (overrides inline column widths) --- */
+@media (max-width: 900px) {
+  .dash-grid { grid-template-columns: minmax(0, 1fr) !important; }
+  .floorplan { height: 440px; }
+}
+
+/* --- POS on phones: swipeable full-size category chips, two items per row --- */
+.pos-cats .chip { flex-shrink: 0; white-space: nowrap; }
+@media (max-width: 560px) {
+  .pos-items { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 10px; }
+  .pos-item { min-height: 84px; padding: 10px; }
+  .pos-item.has-photo img { height: 70px; }
+  .pos-item.has-photo .pi-body { padding: 8px 10px 10px; }
+  .pos-item b { font-size: 13px; }
+}
+/* keep the chip bar and item rows at their natural height inside the scrolling menu */
+.pos-cats { flex-shrink: 0; }
+.pos-items { grid-auto-rows: max-content; }

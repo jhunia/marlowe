@@ -14,20 +14,48 @@ import { rooftop } from './routes/rooftop.ts';
 import { events } from './routes/events.ts';
 import { office } from './routes/office.ts';
 import { insights } from './routes/insights.ts';
-import { seed } from './seed.ts';
+import { resetAndSeed, seed } from './seed.ts';
+import { config, isDemo, isProd } from './config.ts';
 
 migrate();
-if (!scalar<number>('SELECT COUNT(*) FROM users')) {
-  seed();
-  console.log('Seeded demo data — sign in as admin@marlowe.test / marlowe123');
+const seedOptions = { password: config.adminPassword, adminEmail: config.adminEmail, staffActive: !isProd || isDemo, mode: config.seedMode };
+
+if (isDemo) {
+  // test version: always start from fresh sample data, then rebuild it on a timer so
+  // "today" stays today and nothing testers change sticks around
+  resetAndSeed(seedOptions);
+  console.log(`Demo mode: sample data loaded; resets every ${config.demoResetHours}h. All demo logins use the demo password.`);
+  setInterval(() => {
+    try {
+      resetAndSeed(seedOptions);
+      console.log('Demo data reset', new Date().toISOString());
+    } catch (e) {
+      console.error('Demo reset failed', e);
+    }
+  }, config.demoResetHours * 3600_000).unref();
+} else if (!scalar<number>('SELECT COUNT(*) FROM users')) {
+  seed(seedOptions);
+  console.log(
+    isProd
+      ? `First boot: created property data (${config.seedMode}). Sign in as ${config.adminEmail} with ADMIN_PASSWORD; other staff accounts start disabled — set their passwords in Settings.`
+      : 'Seeded demo data — sign in as admin@marlowe.test / marlowe123',
+  );
 }
 
 const app = express();
-app.set('trust proxy', 'loopback');
+app.set('trust proxy', isProd ? true : 'loopback');
 app.disable('x-powered-by');
 app.use(express.json({ limit: '200kb' }));
 
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
+
+// In the test version, stop testers from locking each other out or changing the property set-up.
+if (isDemo) {
+  app.use(['/api/users', '/api/settings', '/api/room-types', '/api/rooms'], (req, _res, next) => {
+    const blocked = req.method !== 'GET' && !(req.baseUrl === '/api/rooms' && req.method === 'PATCH');
+    next(blocked ? new HttpError(403, 'Not available in the test version — this keeps the demo working for everyone') : undefined);
+  });
+}
 app.use('/api/public', publicApi);
 app.use('/api', authRoutes);
 app.use('/api', requireAuth, hotel, dining, rooftop, events, office, insights);
@@ -48,5 +76,4 @@ app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
   res.status(500).json({ error: 'Something went wrong on our side' });
 });
 
-const port = Number(process.env.API_PORT ?? 4000);
-app.listen(port, () => console.log(`Keyhouse API listening on http://localhost:${port}`));
+app.listen(config.port, () => console.log(`Keyhouse API listening on port ${config.port}`));

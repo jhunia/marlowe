@@ -59,11 +59,19 @@
 .hero-stats span { font-size: 13px; color: var(--muted); }
 
 /* booking bar */
-.bookbar { position: relative; margin-top: -56px; z-index: 5; background: #fff; border-radius: 24px; box-shadow: 0 24px 60px -28px rgba(17, 17, 17, 0.35); border: 1px solid var(--rule); display: grid; grid-template-columns: 1fr 1fr 0.7fr auto; padding: 10px; gap: 6px; }
-.bookbar .f { padding: 10px 18px; border-radius: 16px; display: flex; flex-direction: column; gap: 2px; background: #f7f6f3; }
+.bookbar { position: relative; margin-top: -56px; z-index: 5; background: #fff; border-radius: 24px; box-shadow: 0 24px 60px -28px rgba(17, 17, 17, 0.35); border: 1px solid var(--rule); display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 0.8fr) minmax(0, 0.7fr) auto; padding: 10px; gap: 6px; }
+.bookbar.bookbar-stay { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 0.8fr) minmax(0, 0.7fr); }
+.bookbar .f { padding: 10px 18px; border-radius: 16px; display: flex; flex-direction: column; gap: 2px; background: #f7f6f3; min-width: 0; }
+.bookbar .f input, .bookbar .f select { min-width: 0; }
+.stepper { display: flex; align-items: center; gap: 6px; }
+.stepper button { width: 30px; height: 30px; flex-shrink: 0; border-radius: 50%; border: 1px solid var(--rule-strong); background: #fff; font-size: 18px; line-height: 1; cursor: pointer; display: grid; place-items: center; }
+.stepper button:hover:not(:disabled) { border-color: var(--ink); }
+.stepper button:disabled { opacity: 0.35; cursor: not-allowed; }
+.bookbar .stepper input { width: 2.6ch; text-align: center; -moz-appearance: textfield; }
+.stepper input::-webkit-outer-spin-button, .stepper input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .bookbar .f label { font-size: 12px; font-weight: 600; color: var(--muted); }
 .bookbar .f input, .bookbar .f select { border: 0; background: transparent; font-family: var(--f-display); font-weight: 700; font-size: 18px; outline: none; padding: 0; width: 100%; }
-.bookbar button { min-height: 64px; padding: 0 30px; border-radius: 16px; font-size: 16px; }
+.bookbar > button { min-height: 64px; padding: 0 30px; border-radius: 16px; font-size: 16px; }
 
 /* --- sections ------------------------------------------------------------ */
 
@@ -252,8 +260,10 @@
   .hero-photos { height: 320px; }
   .hero-photos .p-main { inset: 0 0 40px 40px; width: calc(100% - 40px); height: calc(100% - 40px); }
   .hero-photos .p-tag { left: 56px; }
-  .bookbar { grid-template-columns: 1fr 1fr; margin-top: -30px; }
-  .bookbar button { grid-column: span 2; }
+  .bookbar, .bookbar.bookbar-stay { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); margin-top: -30px; }
+  .bookbar > button { grid-column: span 2; min-height: 54px; }
+  .bookbar .f { padding: 9px 14px; }
+  .bookbar .f input, .bookbar .f select { font-size: 16px; }
   .two-col { grid-template-columns: 1fr; }
   .summary-card { position: static; }
   .menu-layout { grid-template-columns: 1fr; }
@@ -266,7 +276,9 @@
   .sec { padding: 56px 0; }
   .s-wrap { padding: 0 16px; }
   .site-nav .inner { padding: 0 16px; gap: 12px; }
-  .steps { flex-direction: column; }
+  .steps { gap: 6px; }
+  .steps div { padding: 9px 10px; font-size: 12px; text-align: center; line-height: 1.25; }
+  .steps div b { display: block; margin: 0 0 1px; }
 }
 
 @media (max-width: 560px) {
@@ -282,4 +294,166 @@
   .dish.has-photo > :last-child { grid-column: 2; justify-self: start; flex-direction: row !important; align-items: center !important; gap: 10px; }
   .dish-photo { width: 72px; height: 72px; }
   .spaces { grid-template-columns: 1fr; }
+}
+
+/* ==========================================================================
+   Cart panel, order history, photo viewer, room gallery, My booking
+   ========================================================================== */
+
+/* cart panel (uses the shared drawer) */
+.site .drawer { background: #fff; }
+.cart-tabs { display: flex; gap: 6px; background: #f4f3ef; padding: 4px; border-radius: 999px; margin-bottom: 18px; }
+.cart-tabs button { flex: 1; border: 0; background: transparent; border-radius: 999px; padding: 9px 12px; font-weight: 600; font-size: 14px; color: var(--muted); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.cart-tabs button.on { background: #fff; color: var(--ink); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12); }
+.cart-tabs .n { background: var(--brand); color: #fff; font-size: 11px; font-weight: 700; border-radius: 999px; padding: 1px 7px; }
+.cart-empty { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 10px; padding: 36px 12px; color: var(--muted); }
+.cart-empty h4 { font-family: var(--f-display); font-size: 20px; font-weight: 800; color: var(--ink); }
+.cart-empty p { margin: 0 0 6px; }
+.checkout .basket-lines { max-height: none; border-top: 1px solid #f1f0ec; }
+.checkout .basket-line { padding-left: 0; padding-right: 0; }
+.checkout .basket-foot { padding-left: 0; padding-right: 0; }
+
+/* sticky "view basket" bar on phones */
+.basket-bar { display: none; }
+
+/* past orders */
+.order-list { display: flex; flex-direction: column; gap: 12px; }
+.order-card { border: 1px solid var(--rule); border-radius: 18px; padding: 14px 16px; background: #fff; }
+.order-card.live { border-color: var(--dining); box-shadow: 0 0 0 3px var(--dining-tint); }
+.order-card header { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.order-thumbs { display: flex; gap: 6px; margin: 12px 0 8px; }
+.order-thumbs img, .order-thumbs .ph { width: 44px; height: 44px; border-radius: 10px; object-fit: cover; background: #f1efea; display: block; }
+.order-items { list-style: none; margin: 0; padding: 0; font-size: 13.5px; }
+.order-items li { display: flex; justify-content: space-between; gap: 10px; padding: 3px 0; color: var(--ink-2); }
+.order-card footer { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 10px; padding-top: 10px; border-top: 1px solid #f1f0ec; flex-wrap: wrap; font-size: 14px; }
+.order-list.compact { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+
+/* room gallery: tap to open */
+.gallery-open, .hero-shot, .booking-photo { position: relative; display: block; width: 100%; padding: 0; border: 0; background: none; cursor: zoom-in; }
+.gallery-open img { width: 100%; height: 240px; object-fit: cover; display: block; }
+.gallery-count { position: absolute; right: 10px; top: 10px; display: inline-flex; align-items: center; gap: 5px; background: rgba(17, 17, 17, 0.72); color: #fff; font-size: 12px; font-weight: 600; padding: 5px 10px; border-radius: 999px; backdrop-filter: blur(4px); }
+
+/* selected room showcase */
+.room-showcase { display: grid; grid-template-columns: 2fr 1fr; gap: 8px; border-radius: 22px; overflow: hidden; height: 380px; }
+.room-showcase > * { min-height: 0; height: 100%; }
+.room-showcase .hero-shot { height: 100%; }
+.room-showcase .hero-shot img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.room-showcase .side-shots { display: grid; grid-auto-rows: 1fr; gap: 8px; }
+.room-showcase .side-shots button { padding: 0; border: 0; cursor: zoom-in; overflow: hidden; min-height: 0; }
+.room-showcase .side-shots img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 0.4s; }
+.room-showcase .side-shots button:hover img { transform: scale(1.05); }
+
+/* full-screen viewer */
+.viewer { position: fixed; inset: 0; z-index: 300; background: rgba(10, 10, 12, 0.94); display: flex; flex-direction: column; color: #fff; animation: fade 0.2s ease-out; }
+.viewer-top { display: flex; justify-content: space-between; align-items: center; padding: 14px 18px; font-size: 14px; }
+.viewer-stage { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; position: relative; padding: 0 64px; touch-action: pan-y; }
+.viewer-stage img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 12px; animation: fade 0.2s ease-out; }
+.viewer-btn { width: 44px; height: 44px; border-radius: 50%; border: 0; background: rgba(255, 255, 255, 0.14); color: #fff; display: grid; place-items: center; cursor: pointer; }
+.viewer-btn:hover { background: rgba(255, 255, 255, 0.26); }
+.viewer-btn.nav { position: absolute; top: 50%; transform: translateY(-50%); }
+.viewer-btn.prev { left: 12px; }
+.viewer-btn.next { right: 12px; }
+.viewer-thumbs { display: flex; gap: 8px; justify-content: center; padding: 14px; overflow-x: auto; }
+.viewer-thumbs button { flex-shrink: 0; width: 64px; height: 46px; padding: 0; border: 2px solid transparent; border-radius: 8px; overflow: hidden; opacity: 0.6; cursor: pointer; background: none; }
+.viewer-thumbs button.on { border-color: #fff; opacity: 1; }
+.viewer-thumbs img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+/* My booking */
+.manage { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+.saved-stays { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.saved-stays .eyebrow { width: 100%; }
+.saved-stay { display: inline-flex; align-items: center; border: 1px solid var(--rule-strong); border-radius: 999px; background: #fff; overflow: hidden; }
+.saved-stay.on { border-color: var(--hotel); box-shadow: 0 0 0 2px var(--hotel-tint); }
+.saved-stay button { border: 0; background: none; padding: 7px 4px 7px 12px; font-size: 13px; cursor: pointer; }
+.saved-stay button.x { padding: 7px 10px 7px 6px; color: var(--muted); display: grid; place-items: center; }
+.booking-card { border: 1px solid var(--rule); border-radius: 24px; overflow: hidden; background: #fff; box-shadow: 0 20px 40px -28px rgba(0, 0, 0, 0.35); }
+.booking-photo img { width: 100%; height: 200px; object-fit: cover; display: block; }
+.booking-body { padding: 18px 20px 22px; display: flex; flex-direction: column; gap: 10px; }
+.booking-code { font-size: 18px; letter-spacing: 0.04em; }
+.booking-body h3 { font-family: var(--f-display); font-size: 24px; font-weight: 800; }
+.booking-facts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px; margin: 6px 0 4px; }
+.booking-facts div { background: #faf7f2; border-radius: 12px; padding: 10px 12px; }
+.booking-facts div:first-child { grid-column: span 2; }
+.booking-facts dt { font-size: 12px; color: var(--muted); }
+.booking-facts dd { margin: 2px 0 0; font-weight: 600; }
+.manage-orders { margin-top: 44px; }
+.sub-title { font-family: var(--f-display); font-size: 24px; font-weight: 900; text-transform: uppercase; }
+
+@media (max-width: 860px) {
+  /* menu page: the basket lives in the cart panel; a bar opens it */
+  .menu-layout > .basket { display: none; }
+  .basket-bar { display: flex; position: fixed; left: 12px; right: 12px; bottom: 14px; z-index: 60; align-items: center; gap: 10px; padding: 0 18px; height: 56px; border: 0; border-radius: 999px; background: var(--ink); color: #fff; font-size: 15px; font-weight: 700; box-shadow: 0 16px 34px -12px rgba(0, 0, 0, 0.55); cursor: pointer; }
+  .basket-bar .n { background: var(--brand); border-radius: 999px; min-width: 26px; height: 26px; display: grid; place-items: center; font-size: 13px; }
+  .basket-bar b { margin-left: auto; font-family: var(--f-display); }
+  .site:has(.basket-bar) .feedback-fab { bottom: 84px; }
+  .site:has(.basket-bar) .site-main { padding-bottom: 70px; }
+
+  .room-showcase { grid-template-columns: 1fr; border-radius: 18px; height: auto; }
+  .room-showcase > * { height: auto; }
+  .room-showcase .hero-shot img { height: 240px; }
+  .room-showcase .side-shots { grid-auto-rows: auto; grid-auto-flow: column; grid-auto-columns: 1fr; grid-template-columns: none; }
+  .room-showcase .side-shots img { height: 76px; }
+  .details-step .summary-card { order: -1; }
+
+  .manage { grid-template-columns: 1fr; }
+  .viewer-stage { padding: 0 8px; }
+  .viewer-btn.nav { display: none; }
+}
+
+@media (max-width: 560px) {
+  .manage .grid-2 { grid-template-columns: 1fr; }
+  .order-list.compact { grid-template-columns: 1fr; }
+}
+
+/* ==========================================================================
+   Polish: calmer headings, date labels, room features, phone-first hero
+   ========================================================================== */
+
+/* headings: sentence case and a lighter weight; the club band keeps the loud caps */
+.hero h1 { text-transform: none; font-weight: 700; line-height: 1.02; letter-spacing: -0.03em; }
+.sec-head h2, .split-title { text-transform: none; font-weight: 700; line-height: 1.06; letter-spacing: -0.025em; }
+.sec.photo-band .sec-head h2 { text-transform: uppercase; font-weight: 900; line-height: 1; }
+.menu-section h3, .sub-title { text-transform: none; font-weight: 700; letter-spacing: -0.01em; }
+.lead-short { display: none; }
+
+/* dates always read "Sun 4 Oct"; the native picker sits invisibly on top */
+.date-pick { position: relative; display: block; min-width: 0; }
+.date-pick input { position: absolute; inset: 0; width: 100%; height: 100%; min-height: 0; opacity: 0; cursor: pointer; padding: 0; border: 0; }
+.date-text { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
+.date-text.empty { color: var(--muted); }
+.bookbar .date-text { font-family: var(--f-display); font-weight: 700; font-size: 18px; line-height: 1.5; }
+.bookbar .f:focus-within { box-shadow: inset 0 0 0 2px var(--ink); }
+.field .date-pick { min-height: 42px; display: flex; align-items: center; border: 1px solid var(--rule-strong); background: var(--sheet); border-radius: var(--r-sm); padding: 8px 12px; }
+.field .date-pick:focus-within { border-color: var(--venue, var(--brand)); box-shadow: 0 0 0 3px var(--venue-tint, var(--brand-tint)); }
+.sec.dark .field .date-pick { background: rgba(255, 255, 255, 0.1); border-color: rgba(255, 255, 255, 0.3); color: #fff; }
+
+/* room features */
+.features { list-style: none; margin: 12px 0 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; font-size: 13.5px; color: var(--ink-2); }
+.features li { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.features svg { color: var(--hotel); flex-shrink: 0; }
+.features .more { color: var(--muted); }
+.summary-card .features { margin: -4px 8px 14px; }
+
+@media (max-width: 860px) {
+  /* hero: one photo behind the words, so the booking bar is on the first screen */
+  .hero { position: relative; background: #15131c; color: #fff; }
+  .hero .s-wrap { display: block; position: static; min-height: 0; padding-top: 40px; padding-bottom: 68px; }
+  .hero .copy { position: relative; z-index: 1; }
+  .hero-photos { position: absolute; inset: 0; height: auto; z-index: 0; }
+  .hero-photos::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(12, 10, 20, 0.35) 0%, rgba(12, 10, 20, 0.6) 50%, rgba(12, 10, 20, 0.85) 100%); }
+  .hero-photos .p-main { inset: 0; width: 100%; height: 100%; border-radius: 0; box-shadow: none; }
+  .hero-photos .p-a, .hero-photos .p-b, .hero-photos .p-tag { display: none; }
+  .hero h1 { font-size: 38px; margin-bottom: 12px; }
+  .hero .kicker { color: rgba(255, 255, 255, 0.78); font-size: 11px; margin-bottom: 12px; }
+  .hero p.lead { display: none; }
+  .hero p.lead-short { display: block; color: rgba(255, 255, 255, 0.88); font-size: 15.5px; margin: 0; }
+  .hero-ctas, .hero-stats { display: none !important; }
+  .bookbar .date-text { font-size: 16px; }
+}
+
+@media (max-width: 560px) {
+  .site-announce { font-size: 12.5px; padding: 7px 12px; line-height: 1.35; }
+  .site .feedback-fab { width: 44px; padding: 0; justify-content: center; left: 12px; bottom: 12px; }
+  .site .feedback-fab .fab-label { display: none; }
+  .features { font-size: 13px; }
 }

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { api } from '../lib/api';
 import { addDays, fmtDate, isoDate } from '../lib/format';
+import { DateInput } from './DateInput';
 import { Field } from '../components/ui';
 import { VenueGlyph } from './SiteLayout';
 
@@ -112,7 +113,7 @@ export function Celebrate() {
                   </select>
                 </Field>
                 <Field label="Date">
-                  <input type="date" required value={f.date} min={addDays(isoDate(), 7)} onChange={set('date')} />
+                  <DateInput required value={f.date} min={addDays(isoDate(), 7)} onChange={(v) => setF({ ...f, date: v })} />
                 </Field>
                 <Field label="Guests">
                   <input type="number" min={10} max={2000} required value={f.guests} onChange={set('guests')} />

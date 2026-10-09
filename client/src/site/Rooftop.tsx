@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useApi } from '../lib/hooks';
 import { api } from '../lib/api';
-import { addDays, fmtDate, isoDate, money, parseDate } from '../lib/format';
+import { addDays, fmtDate, isoDate, parseDate, price } from '../lib/format';
+import { DateInput } from './DateInput';
 import { Field } from '../components/ui';
 import { usePublicInfo } from './SiteLayout';
 import { DECK_PHOTOS, photo } from '../lib/img';
@@ -64,9 +65,9 @@ function Cabanas() {
         </div>
 
         <div className="row wrap" style={{ marginBottom: 24, gap: 16 }}>
-          <div className="field" style={{ width: 180 }}>
+          <div className="field" style={{ width: 190 }}>
             <label>Day</label>
-            <input type="date" value={date} min={isoDate()} max={addDays(isoDate(), 60)} onChange={(e) => { setDate(e.target.value); setSel(null); setDone(null); }} />
+            <DateInput value={date} min={isoDate()} max={addDays(isoDate(), 60)} onChange={(v) => { if (!v) return; setDate(v); setSel(null); setDone(null); }} />
           </div>
           <div className="field" style={{ width: 130 }}>
             <label>From</label>
@@ -91,7 +92,7 @@ function Cabanas() {
             <h4>
               {done.label} is yours — ref {done.reference}
             </h4>
-            {fmtDate(done.date, 'long')}, {done.start_time}–{done.end_time}. {money(done.price)} payable on the deck.
+            {fmtDate(done.date, 'long')}, {done.start_time}–{done.end_time}. {price(done.price)} payable on the deck.
           </div>
         )}
 
@@ -106,7 +107,7 @@ function Cabanas() {
                 <span className="small" style={{ opacity: 0.75 }}>
                   up to {r.capacity} guests
                 </span>
-                <span className="pr">{taken ? 'Booked for these hours' : money(r.price)}</span>
+                <span className="pr">{taken ? 'Booked for these hours' : price(r.price)}</span>
               </button>
             );
           })}
@@ -140,7 +141,7 @@ function Cabanas() {
             </div>
             <div className="row">
               <button className="btn lg" style={{ background: 'var(--brass-2)', color: 'var(--ink)', borderColor: 'var(--brass-2)' }}>
-                Reserve · {money(res.price)}
+                Reserve · {price(res.price)}
               </button>
               <button type="button" className="btn ghost" onClick={() => setSel(null)}>
                 Cancel
@@ -193,7 +194,7 @@ function ClubNights({ preselect }: { preselect: number | null }) {
                   <div>
                     <h4>{c.title}</h4>
                     <div className="muted">
-                      {c.dj ?? 'Line-up TBC'} · cover {money(c.cover_charge)}
+                      {c.dj ?? 'Line-up TBC'} · cover {price(c.cover_charge)}
                     </div>
                   </div>
                   <button className={`btn ${night === c.id ? 'venue' : 'ghost'}`} onClick={() => { setNight(c.id); setDone(null); }}>
@@ -208,7 +209,7 @@ function ClubNights({ preselect }: { preselect: number | null }) {
             {done ? (
               <div className="success-note">
                 <h4>You’re on the list.</h4>
-                {done.title}, {fmtDate(done.date, 'long')} — {done.pax} {done.pax > 1 ? 'people' : 'person'}. Show your name at the door; cover {money(done.cover_charge)} each.
+                {done.title}, {fmtDate(done.date, 'long')} — {done.pax} {done.pax > 1 ? 'people' : 'person'}. Show your name at the door; cover {price(done.cover_charge)} each.
               </div>
             ) : n ? (
               <form className="form-panel stack" onSubmit={join}>

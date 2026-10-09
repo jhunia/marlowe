@@ -7,6 +7,7 @@ import { addItem, recalc } from '../services/orders.ts';
 import { createEvent } from '../services/events.ts';
 import { checkResourceSlot } from './rooftop.ts';
 import { readSettings } from './office.ts';
+import { config, isDemo } from '../config.ts';
 
 /** Customer-facing API — no staff login. Everything here is validated and rate-limited. */
 export const publicApi = Router();
@@ -33,13 +34,36 @@ const futureDate = z
   .refine((d) => d >= today(), 'cannot be in the past')
   .refine((d) => d <= addDays(today(), 540), 'is too far ahead');
 
+/* ------------------------------------------------------------------ meta */
+
+/** Tells both apps whether this is the public test version. */
+publicApi.get('/meta', (_req, res) => {
+  res.json({ demo: isDemo, reset_hours: isDemo ? config.demoResetHours : null });
+});
+
+publicApi.post('/feedback', limit(10, 10 * 60_000), (req, res) => {
+  const b = parse(
+    z.object({
+      rating: z.number().int().min(1).max(5).nullable().optional(),
+      message: z.string().trim().min(3, 'tell us a little more').max(2000),
+      page: z.string().max(200).optional(),
+      area: z.enum(['site', 'console']).default('site'),
+      role: z.string().max(40).optional(),
+      name: z.string().trim().max(80).optional(),
+    }),
+    req.body,
+  );
+  run('INSERT INTO feedback (rating, message, page, area, role, name) VALUES (?, ?, ?, ?, ?, ?)', b.rating ?? null, b.message, b.page ?? null, b.area, b.role ?? null, b.name || null);
+  res.status(201).json({ ok: true });
+});
+
 /* ------------------------------------------------------------------ info */
 
 publicApi.get('/info', (_req, res) => {
   const s = readSettings();
   res.json({
     property: { name: s.property_name, address: s.address, phone: s.phone, email: s.email, currency: s.currency, check_in_time: s.check_in_time, check_out_time: s.check_out_time, vat_rate: Number(s.vat_rate), service_rate: Number(s.service_rate) },
-    room_types: all('SELECT id, name, code, base_rate, capacity, description, images FROM room_types ORDER BY base_rate').map(withImages),
+    room_types: all('SELECT id, name, code, base_rate, capacity, description, images, features FROM room_types ORDER BY base_rate').map(withImages),
     resources: all(`SELECT id, kind, label, capacity, price FROM resources WHERE venue = 'rooftop' ORDER BY kind, id`),
     club_nights: all(
       `SELECT id, title, date, dj, cover_charge, capacity, status FROM club_nights WHERE date >= ? AND status IN ('scheduled','live') ORDER BY date LIMIT 6`,
@@ -70,6 +94,7 @@ publicApi.get('/availability', (req, res) => {
       name: t.name,
       description: t.description,
       images: t.images,
+      features: t.features,
       capacity: t.capacity,
       rate: t.base_rate,
       available: t.available,
@@ -112,14 +137,15 @@ publicApi.get('/booking', limit(30, 10 * 60_000), (req, res) => {
   const code = String(req.query.code ?? '').trim().toUpperCase();
   const last = String(req.query.last_name ?? '').trim().toLowerCase();
   const r = get<any>(
-    `SELECT x.code, x.check_in, x.check_out, x.status, x.adults, x.children, x.rate, t.name AS room_type, g.first_name, g.last_name
+    `SELECT x.code, x.check_in, x.check_out, x.status, x.adults, x.children, x.rate, t.name AS room_type, t.images, g.first_name, g.last_name
        FROM reservations x JOIN guests g ON g.id = x.guest_id JOIN room_types t ON t.id = x.room_type_id
       WHERE x.code = ? AND lower(g.last_name) = ?`,
     code,
     last,
   );
   if (!r) throw notFound('Booking');
-  res.json({ ...r, nights: nights(r.check_in, r.check_out) });
+  const n = nights(r.check_in, r.check_out);
+  res.json({ ...withImages(r), nights: n, total: round2(r.rate * n) });
 });
 
 /* ------------------------------------------------------------ food order */
@@ -176,10 +202,16 @@ publicApi.post('/order', writeLimit, (req, res) => {
   res.status(201).json(order);
 });
 
-publicApi.get('/order/:code', limit(120, 10 * 60_000), (req, res) => {
-  const o = get<any>(`SELECT id, code, status, total, fulfilment, created_at FROM orders WHERE code = ? AND channel = 'online'`, String(req.params.code).toUpperCase());
-  if (!o) throw notFound('Order');
-  const items = all<any>(`SELECT name, qty, unit_price, status FROM order_items WHERE order_id = ? AND status != 'void'`, o.id);
+/** Guest-safe view of an online order: no ids, staff names or phone numbers. */
+function orderSummary(code: string) {
+  const o = get<any>(`SELECT id, code, status, total, fulfilment, created_at FROM orders WHERE code = ? AND channel = 'online'`, code.toUpperCase());
+  if (!o) return null;
+  const items = all<any>(
+    `SELECT i.menu_item_id, i.name, i.qty, i.unit_price, i.status, m.image_url
+       FROM order_items i LEFT JOIN menu_items m ON m.id = i.menu_item_id
+      WHERE i.order_id = ? AND i.status != 'void'`,
+    o.id,
+  );
   let stage: 'received' | 'preparing' | 'ready' | 'completed' | 'cancelled' = 'received';
   if (o.status === 'void') stage = 'cancelled';
   else if (o.status !== 'open' || (items.length && items.every((i) => i.status === 'served'))) stage = 'completed';
@@ -187,7 +219,23 @@ publicApi.get('/order/:code', limit(120, 10 * 60_000), (req, res) => {
   else if (items.some((i) => i.status === 'ready')) stage = 'preparing';
   else if (Date.now() - new Date(o.created_at.replace(' ', 'T') + 'Z').getTime() > 3 * 60_000) stage = 'preparing';
   const { id: _id, ...rest } = o;
-  res.json({ ...rest, stage, items });
+  return { ...rest, stage, items: items.map(({ status: _s, ...i }) => i) };
+}
+
+publicApi.get('/order/:code', limit(120, 10 * 60_000), (req, res) => {
+  const o = orderSummary(String(req.params.code));
+  if (!o) throw notFound('Order');
+  res.json(o);
+});
+
+/** Several orders at once — the "My orders" list on a guest's device. Unknown codes are skipped. */
+publicApi.get('/orders', limit(120, 10 * 60_000), (req, res) => {
+  const codes = String(req.query.codes ?? '')
+    .split(',')
+    .map((c) => c.trim())
+    .filter((c) => /^ON-[A-Z0-9]{5}$/i.test(c))
+    .slice(0, 30);
+  res.json(codes.map(orderSummary).filter(Boolean));
 });
 
 /* ----------------------------------------------------------- table booking */

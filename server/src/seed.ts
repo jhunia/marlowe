@@ -23,7 +23,17 @@ const TABLES = [
   'menu_categories', 'housekeeping_tasks', 'folio_items', 'events', 'reservations', 'guests', 'rooms', 'room_types', 'users', 'settings',
 ];
 
-export function seed() {
+export interface SeedOptions {
+  /** password for the admin account (and every staff account in development) */
+  password: string;
+  adminEmail?: string;
+  /** production: only the admin can sign in until staff passwords are set in Settings */
+  staffActive: boolean;
+  /** "clean" removes the sample bookings, sales and events after setup */
+  mode: 'demo' | 'clean';
+}
+
+export function seed(opts: SeedOptions = { password: 'marlowe123', staffActive: true, mode: 'demo' }) {
   const T = today();
   tx(() => {
     /* ------------------------------------------------------------ settings */
@@ -41,7 +51,7 @@ export function seed() {
     for (const [k, v] of Object.entries(settings)) run('INSERT INTO settings (key, value) VALUES (?, ?)', k, v);
 
     /* --------------------------------------------------------------- users */
-    const pw = hashPassword('marlowe123');
+    const pw = hashPassword(opts.password);
     const users: [string, string, string][] = [
       ['Adwoa Mensah', 'admin@marlowe.test', 'admin'],
       ['Kwaku Boateng', 'manager@marlowe.test', 'manager'],
@@ -53,7 +63,11 @@ export function seed() {
       ['Yaw Amponsah', 'accounts@marlowe.test', 'accounts'],
     ];
     const uid: Record<string, number> = {};
-    for (const [n, e, r] of users) uid[r] = run('INSERT INTO users (name, email, password_hash, role) VALUES (?, ?, ?, ?)', n, e, pw, r).id;
+    for (const [n, e, r] of users) {
+      const email = r === 'admin' && opts.adminEmail ? opts.adminEmail : e;
+      const active = r === 'admin' || opts.staffActive ? 1 : 0;
+      uid[r] = run('INSERT INTO users (name, email, password_hash, role, active) VALUES (?, ?, ?, ?, ?)', n, email, pw, r, active).id;
+    }
 
     /* --------------------------------------------------------------- rooms */
     const types = [
@@ -69,8 +83,19 @@ export function seed() {
       TS: ['https://images.unsplash.com/photo-1559414059-34fe0a59e57a', 'https://images.unsplash.com/photo-1590490360182-c33d57733427', 'https://images.unsplash.com/photo-1576354302919-96748cb8299e'],
       PH: ['https://images.unsplash.com/photo-1618773928121-c32242e63f39', 'https://images.unsplash.com/photo-1549638441-b787d2e11f14', 'https://images.unsplash.com/photo-1725962479542-1be0a6b0d444', 'https://images.unsplash.com/photo-1667125095636-dce94dcbdd96'],
     };
+    // what guests compare rooms on — editable in Settings → Rooms inventory
+    const roomFeatures: Record<string, string[]> = {
+      CK: ['King bed', '28 m²', 'Garden view', 'Rain shower', 'Air-conditioning', 'Free Wi-Fi', 'Breakfast included'],
+      DT: ['2 queen beds', '34 m²', 'City view', 'Sofa', 'Air-conditioning', 'Free Wi-Fi', 'Breakfast included'],
+      TS: ['King bed', '52 m²', 'Private terrace', 'Soaking tub', 'Skydeck access', 'Air-conditioning', 'Free Wi-Fi', 'Breakfast included'],
+      PH: ['2 bedrooms', '110 m²', 'Wraparound balcony', 'Butler service', 'Skydeck cabana', 'Airport transfer', 'Free Wi-Fi', 'Breakfast included'],
+    };
     const typeId: Record<string, number> = {};
-    for (const [n, c, r, cap, d] of types) typeId[c] = run('INSERT INTO room_types (name, code, base_rate, capacity, description, images) VALUES (?, ?, ?, ?, ?, ?)', n, c, r, cap, d, JSON.stringify(roomPhotos[c] ?? [])).id;
+    for (const [n, c, r, cap, d] of types)
+      typeId[c] = run(
+        'INSERT INTO room_types (name, code, base_rate, capacity, description, images, features) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        n, c, r, cap, d, JSON.stringify(roomPhotos[c] ?? []), JSON.stringify(roomFeatures[c] ?? []),
+      ).id;
     const layout: [number, string[]][] = [
       [1, ['CK', 'CK', 'CK', 'DT', 'DT', 'CK', 'CK', 'DT']],
       [2, ['CK', 'CK', 'DT', 'DT', 'CK', 'CK', 'DT', 'TS']],
@@ -640,6 +665,17 @@ export function seed() {
     ];
     for (const [u, v, a, t] of acts) run('INSERT INTO activity_log (user_id, action, venue, created_at) VALUES (?, ?, ?, ?)', uid[u === 'frontdesk' ? 'front_desk' : u] ?? null, a, v, stamp(T, t));
   });
+  if (opts.mode === 'clean') clearTransactions();
+}
+
+/** Keep the property set-up (rooms, menus, tables, resources, staff, stock) and drop all sample activity. */
+export function clearTransactions() {
+  tx(() => {
+    for (const t of ['activity_log', 'stock_movements', 'event_tasks', 'event_items', 'guest_list', 'club_nights', 'payments', 'resource_bookings', 'table_bookings', 'order_items', 'orders', 'housekeeping_tasks', 'folio_items', 'events', 'reservations', 'guests', 'shifts'])
+      run(`DELETE FROM ${t}`);
+    run(`UPDATE rooms SET status = 'vacant_clean', notes = NULL`);
+    run(`UPDATE dining_tables SET status = 'free'`);
+  });
 }
 
 function addMinutes(hhmm: string, m: number) {
@@ -648,14 +684,23 @@ function addMinutes(hhmm: string, m: number) {
   return `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`;
 }
 
+/** Wipe everything except collected feedback, then seed again. */
+export function resetAndSeed(opts?: SeedOptions) {
+  db.exec('PRAGMA foreign_keys = OFF');
+  try {
+    tx(() => {
+      for (const t of TABLES) db.exec(`DELETE FROM ${t}`);
+    });
+  } finally {
+    db.exec('PRAGMA foreign_keys = ON');
+  }
+  seed(opts);
+}
+
 // `node src/seed.ts --reset` wipes and re-seeds.
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   migrate();
-  if (process.argv.includes('--reset')) {
-    db.exec('PRAGMA foreign_keys = OFF');
-    for (const t of TABLES) db.exec(`DELETE FROM ${t}`);
-    db.exec('PRAGMA foreign_keys = ON');
-  }
-  seed();
+  if (process.argv.includes('--reset')) resetAndSeed();
+  else seed();
   console.log(`Seeded The Marlowe demo data. Sign in as admin@marlowe.test / marlowe123`);
 }

@@ -14,7 +14,7 @@ export function roomIsFree(roomId: number, from: string, to: string, exceptId = 
 }
 
 export function availability(from: string, to: string, typeId?: number) {
-  const types = all<{ id: number; name: string; code: string; base_rate: number; capacity: number; description: string; images: string }>(
+  const types = all<{ id: number; name: string; code: string; base_rate: number; capacity: number; description: string; images: string; features: string }>(
     `SELECT * FROM room_types ${typeId ? 'WHERE id = ?' : ''} ORDER BY base_rate`,
     ...(typeId ? [typeId] : []),
   );
